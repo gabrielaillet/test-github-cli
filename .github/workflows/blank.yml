@@ -1,0 +1,50 @@
+name: Branch Flow Status Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  branch-flow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Evaluate branch flow
+        id: check
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+          echo "head=$HEAD" >> $GITHUB_OUTPUT
+
+          if [ "$BASE" = "qa" ] && [ "$HEAD" != "dev" ]; then
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "message=Only dev can merge into qa" >> $GITHUB_OUTPUT
+          elif [ "$BASE" = "main" ] && [ "$HEAD" != "qa" ]; then
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "message=Only qa can merge into main" >> $GITHUB_OUTPUT
+          else
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "message=Branch flow is valid" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create status check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = "${{ steps.check.outputs.result }}";
+            const message = "${{ steps.check.outputs.message }}";
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: "Branch Flow Policy",
+              head_sha: context.payload.pull_request.head.sha,
+              status: "completed",
+              conclusion: result,
+              output: {
+                title: "Branch Flow Validation",
+                summary: message
+              }
+            });
