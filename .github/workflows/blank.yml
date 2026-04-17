@@ -1,50 +1,28 @@
-name: Branch Flow Status Check
+name: Branch Flow Policy
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches:
+      - qa
+      - main
 
 jobs:
-  branch-flow:
+  validate:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Evaluate branch flow
-        id: check
+      - name: Validate branch flow
         run: |
-          BASE="${{ github.event.pull_request.base.ref }}"
-          HEAD="${{ github.event.pull_request.head.ref }}"
-
-          echo "base=$BASE" >> $GITHUB_OUTPUT
-          echo "head=$HEAD" >> $GITHUB_OUTPUT
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
 
           if [ "$BASE" = "qa" ] && [ "$HEAD" != "dev" ]; then
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "message=Only dev can merge into qa" >> $GITHUB_OUTPUT
-          elif [ "$BASE" = "main" ] && [ "$HEAD" != "qa" ]; then
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "message=Only qa can merge into main" >> $GITHUB_OUTPUT
-          else
-            echo "result=success" >> $GITHUB_OUTPUT
-            echo "message=Branch flow is valid" >> $GITHUB_OUTPUT
+            echo "❌ Only dev → qa allowed"
+            exit 1
           fi
 
-      - name: Create status check
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const result = "${{ steps.check.outputs.result }}";
-            const message = "${{ steps.check.outputs.message }}";
+          if [ "$BASE" = "main" ] && [ "$HEAD" != "qa" ]; then
+            echo "❌ Only qa → main allowed"
+            exit 1
+          fi
 
-            await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: "Branch Flow Policy",
-              head_sha: context.payload.pull_request.head.sha,
-              status: "completed",
-              conclusion: result,
-              output: {
-                title: "Branch Flow Validation",
-                summary: message
-              }
-            });
+          echo "✅ OK"
